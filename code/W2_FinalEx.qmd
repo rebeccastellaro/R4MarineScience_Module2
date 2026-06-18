@@ -366,29 +366,30 @@ fish_stats <- catch_data_final |>
 
 ```{r}
 fish_stats |> 
-  ggplot(aes(x = zone, y = mean_catch, fill = zone)) +
+  ggplot(aes(x = zone, y = mean_catch, fill = scientific_name)) +
   geom_line(group = 1) +
   # add in points from master data
-  geom_point(data = catch_data_final, aes(x = zone, y = count), 
-             position = position_jitter(width = 0.2), alpha = 0.2, size = 1, inherit.aes = FALSE) +
+  geom_point(data = catch_data_final, aes(x = zone, y = count),
+             position = position_jitter(width = 0.2), alpha = 0.2, size = 1, inherit.aes = FALSE) + 
   geom_point(position = "dodge", size = 4, pch = 23) +
-  
+  # SE pretty narrow, potentially not worth plotting but let's viewer see that included
   geom_errorbar(aes(ymin = mean_catch - sem_catch, ymax = mean_catch + sem_catch), 
-                position = position_dodge(0.9), width = 0.2) +
-  
+                position = position_dodge(0.9), width = 0.2) + 
   facet_wrap(~ scientific_name, scales = "fixed") +
   theme_minimal() +
   theme(
-    strip.text = element_text(face = "italic", size = 10, colour = "grey20"),
+    strip.text = element_text(face = "italic", size = 10, colour = "grey20"), # spp names in italic
    # legend.position = "bottom"
-    legend.position = "none"
+    legend.position = "none" # legend unnecessary
   ) +
   labs(
-    #title = "Predatory Fish Abundance across Estuarine Salinity Gradients",
+    #title = "Predatory Fish Abundance across Estuarine Salinity Gradients", # default ggplot title appears on top
     #subtitle = "Ross River Estuary System, May 2026",
     x = "Spatial Zone",
-    y = "Abundance (per day)",
-    fill = "Spatial Zone"
+    # scientific label for y axis of n day -1 use regex to get superscript
+    y = expression("Abundance (n day"^-1*")"),
+  #  y = "Daily abundance (n day^-1)"
+    y = "Abundance (per day)"
   )
 ```
 
