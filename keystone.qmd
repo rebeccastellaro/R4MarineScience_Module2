@@ -301,7 +301,25 @@ sal_sum |>
   )
 ```
 
-# Now looking at patterns in fish abundance
+# 
+
+## Summary statistics: fish counts and salinity by species and zone
+
+```{r}
+summary_table <- catch_data_final |>
+  group_by(zone, scientific_name) |>
+  summarise(
+    mean_count = mean(count, na.rm = TRUE),
+    sd_count = sd(count, na.rm = TRUE),
+    mean_salinity = mean(mean_salinity, na.rm = TRUE),
+    sd_salinity = sd(mean_salinity, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+summary_table
+```
+
+##   Now looking at patterns in fish abundance
 
 ## Calculate summary stats
 
