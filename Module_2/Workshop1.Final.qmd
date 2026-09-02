@@ -1,0 +1,70 @@
+---
+title: "R for Marine Science - Workshop 1"
+author: "Rebecca Castellaro"
+format:
+  html:
+    code-fold: true
+    toc: true
+    toc-location: right
+    theme: spacelab
+editor: visual
+execute:
+  echo: false
+  message: false
+  warning: false
+---
+
+## Dataset summary
+
+This workshop used the Palmer Penguins dataset, a real morphological and environmental dataset collected across three islands in the Palmer Archipelago, Antarctica, covering three penguin species: Adelie, Chinstrap, and Gentoo. The dataset includes physical measurements (bill length, bill depth, flipper length, body mass) alongside categorical variables such as species, island, and sex, recorded for several hundred individual penguins. It was used here to practice core data wrangling, including cleaning, filtering, sorting, and aggregating a real biological dataset, and to compare body mass patterns across species, islands, and sexes.
+
+## Methods
+
+Before any analysis, the dataset was inspected using `glimpse()` and `str()` to check variable types and identify columns containing missing values. The core dplyr verbs `select()`, `filter()`, `arrange()`, and `mutate()` were used to practice isolating variables of interest, subsetting records by condition, sorting by body mass, and computing new variables such as bill length to bill depth ratio. A comparison between a legacy `data.frame` and a modern tibble was also carried out directly on this dataset to observe their different console behaviours before moving into aggregation with `group_by()` and `summarise()`.
+
+```{r wrangling}
+#| include: false
+
+library(tidyverse)
+library(palmerpenguins)
+data("penguins")
+
+# Aggregation with the missing value trap fixed via na.rm = TRUE
+biological_signal <- penguins |>
+  group_by(species, sex) |>
+  summarise(
+    sample_size = n(),
+    mean_mass_g = mean(body_mass_g, na.rm = TRUE),
+    sd_mass_g = sd(body_mass_g, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# Mean body mass by species and island, with standard deviation error bars
+mass_compare_plot <- penguins |>
+  group_by(species, island) |>
+  summarise(
+    mean_mass = mean(body_mass_g, na.rm = TRUE),
+    sd_mass = sd(body_mass_g, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = species, y = mean_mass, colour = island)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_mass - sd_mass, ymax = mean_mass + sd_mass), width = 0.2) +
+  labs(
+    title = "Mean Body Mass by Species and Island",
+    subtitle = "Error bars represent standard deviation",
+    y = "Mean Body Mass (g)",
+    x = "Species",
+    colour = "Island"
+  ) +
+  theme_minimal()
+```
+
+## Body mass by species and island
+
+```{r}
+mass_compare_plot
+```
+
+Gentoo penguins are clearly heavier on average than either Adelie or Chinstrap, with a gap that looks far larger than any variation seen between islands within a single species. This suggests that species identity is doing most of the work in explaining body mass differences in this dataset, rather than which island a penguin happened to be measured on. It is also worth noting that Gentoo penguins were only recorded on Biscoe Island, while Adelie appear across all three islands and Chinstrap only on Dream Island, so the apparent consistency across islands for Adelie specifically is the more informative comparison here, since it is the only species with genuine cross-island data. The relatively tight error bars within each group suggest fairly consistent body mass among individuals of the same species and island, rather than large amounts of
