@@ -1,0 +1,166 @@
+---
+title: "R4MS Workshop 2 - Final Exercise"
+author: "Ben Cresswell"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output:
+  html_document:
+    code_folding: hide
+    collapse: no
+    df_print: paged
+    fig_caption: yes
+    fig_height: 6
+    fig_width: 10
+    highlight: textmate
+    theme: spacelab
+    toc: yes
+    toc_float: yes
+editor_options:
+  chunk_output_type: inline
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo = FALSE,
+  include = TRUE,
+  message = FALSE,
+  warning = FALSE)
+```
+
+# Introduction
+
+This is the keystone exercise for Workshop 2, examining the relationship between water quality and predatory fish along the Ross River Estuary. The task involved combining four separate, deliberately messy files (a fish catch log split across four Excel tabs, a site metadata file, a species taxonomic dictionary, and a water quality sensor dataset) into a single clean, joined dataset ready for analysis.
+
+```{r wrangling, include=FALSE}
+library(tidyverse)
+library(readxl)
+
+# Load the four catch log tabs and combine
+file_path <- here::here("data/workshop2/estuary_catch_log.xlsx")
+catch_data <- excel_sheets(file_path) |>
+  map_dfr(~read_excel(path = file_path, sheet = .x))
+
+# Load metadata and taxonomic dictionary
+metadata <- read_csv(here::here("data/workshop2/estuary_metadata.csv"))
+species_dict <- read_csv(here::here("data/workshop2/species_dictionary.csv"))
+
+# Standardise site names in both tables
+catch_data <- catch_data |>
+  mutate(
+    site = str_to_lower(str_trim(site)),
+    site = str_replace_all(site, " ", "_"))
+
+metadata <- metadata |>
+  mutate(
+    site_name = str_to_lower(str_trim(site_name)),
+    site_name = str_replace_all(site_name, " ", "_"))
+
+# Standardise species names and translate to scientific names
+catch_data <- catch_data |>
+  mutate(
+    species = str_to_lower(str_trim(species)),
+    species = str_replace_all(species, " ", "_")
+  ) |>
+  mutate(common_name = species) |>
+  left_join(species_dict, by = join_by(common_name)) |>
+  select(site, date, common_name, scientific_name, count) |>
+  select(-common_name)
+
+# Load and join the sensor data
+source(here::here("code/diw_sensor.R"))
+
+catch_data_final <- catch_data |>
+  left_join(metadata, by = join_by(site == site_name)) |>
+  left_join(sensor_daily, by = join_by(site, date))
+
+# Build the zero-catch framework so missing observations become explicit zeros
+catch_data_final <- catch_data_final |>
+  complete(
+    nesting(site, date, zone, mean_temp, mean_salinity, mean_turbidity),
+    scientific_name
+  ) |>
+  mutate(count = coalesce(count, 0))
+```
+
+# The clean master dataset
+
+```{r}
+head(catch_data_final)
+```
+
+The final dataset combines the cleaned catch log, site metadata, and water quality sensor readings into a single table with standardised site and species names, scientific taxonomy in place of common names, and an explicit zero-catch framework so that unrecorded observations are distinguished from genuine absences.
+
+# Checking the environmental gradient
+
+Before analysing fish patterns, salinity, turbidity, and temperature were each checked for meaningful variation across the estuary's zones. Salinity showed the clearest gradient and is used as the primary environmental variable of interest; turbidity and temperature also varied and are noted as potential confounding factors during interpretation.
+
+```{r}
+sal_sum <- catch_data_final |>
+  group_by(zone) |>
+  summarise(
+    sd_salinity = sd(mean_salinity, na.rm = TRUE),
+    median_salinity = median(mean_salinity, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+sal_sum |>
+  ggplot(aes(x = zone, y = median_salinity)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = median_salinity - sd_salinity, ymax = median_salinity + sd_salinity), width = 0.2) +
+  theme_minimal() +
+  labs(
+    x = "Zone",
+    y = "Median Salinity (ppt)"
+  )
+```
+
+# Summary statistics: fish counts and salinity by species and zone
+
+```{r}
+summary_table <- catch_data_final |>
+  group_by(zone, scientific_name) |>
+  summarise(
+    mean_count = mean(count, na.rm = TRUE),
+    sd_count = sd(count, na.rm = TRUE),
+    mean_salinity = mean(mean_salinity, na.rm = TRUE),
+    sd_salinity = sd(mean_salinity, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+summary_table
+```
+
+# Fish abundance across the salinity gradient
+
+```{r}
+fish_stats <- catch_data_final |>
+  group_by(zone, scientific_name) |>
+  summarise(
+    mean_catch = mean(count),
+    sem_catch = sd(count) / sqrt(n()),
+    .groups = "drop"
+  )
+
+fish_stats |>
+  ggplot(aes(x = zone, y = mean_catch, fill = zone)) +
+  geom_line(group = 1) +
+  geom_point(data = catch_data_final, aes(x = zone, y = count),
+             position = position_jitter(width = 0.2), alpha = 0.2, size = 1, inherit.aes = FALSE) +
+  geom_point(position = "dodge", size = 4, pch = 23) +
+  geom_errorbar(aes(ymin = mean_catch - sem_catch, ymax = mean_catch + sem_catch),
+                position = position_dodge(0.9), width = 0.2) +
+  facet_wrap(~ scientific_name, scales = "fixed") +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(face = "italic", size = 10, colour = "grey20"),
+    legend.position = "none"
+  ) +
+  labs(
+    x = "Spatial Zone",
+    y = "Abundance (per day)",
+    fill = "Spatial Zone"
+  )
+```
+
+# Reflection
+
+This exercise required combining every wrangling skill from the workshop into a single reproducible pipeline: multi-sheet Excel ingestion, text standardisation, relational joins, and explicit handling of implicit missing data via `complete()`. The zero-catch framework was the most conceptually important step, since treating an unrecorded observation as genuinely unknown, rather than assuming it meant zero, would otherwise have introduced a systematic bias into every downstream summary statistic and plot.
