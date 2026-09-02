@@ -1,0 +1,110 @@
+---
+title: "R for Marine Science - Workshop 2"
+author: "Rebecca Castellaro"
+format: 
+  html:
+    code-fold: show
+    toc: true
+    toc-location: right
+    theme: spacelab
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Introduction
+
+This one was different from Workshop 1 because Copilot and chattr were actually allowed this time. I still had to actually read and understand what it was giving me though, not just accept it and move on. We covered a lot: tidy data rules, pivoting longer and wider, splitting/combining columns, cleaning up messy text and dates, joining tables together, and a few different ways of dealing with missing data depending on what the "missing" actually meant.
+
+## Sourcing the wrangling script
+
+All the concept demonstrations and guided exercises live in `Workshop_2.R`.
+
+```{r source-script}
+library(tidyverse)
+library(palmerpenguins)
+library(lubridate)
+
+source("Workshop_2.R")
+```
+
+## Tidy data principles
+
+The three rules of tidy data:
+
+1.  Each variable its own column,
+
+2.  Each observation its own row
+
+3.  Each value its own cell
+
+    This all matters because every tidyverse tool (including ggplot2) is built to expect that shape. `table1` demonstrates this directly: with `cases` and `population` as proper columns, computing a rate or plotting trends over time takes one line. `table2` and `table3` hold the exact same information but need restructuring first before any of that works.
+
+## Pivoting: lengthening and widening
+
+### Morphometric distributions (pivot_longer)
+
+Stacking the four morphometric columns (bill length, bill depth, flipper length, body mass) into a single `measurement_type`/`value` pair makes faceted plotting possible in one `ggplot()` call.
+
+```{r morphometric-plot}
+morphometric_distributions_plot
+```
+
+Gentoo penguins clearly separate out on body mass and flipper length, while bill depth shows the opposite pattern, Gentoo tend to have shallower bills despite being the largest species overall. This is exactly the kind of pattern that's hard to spot from four separate columns but becomes strikingly clear once everything's on a shared axis.
+
+### Species-by-island summary matrix (pivot_wider)
+
+```{r mass-matrix}
+mass_matrix
+```
+
+The `NA` for Adelie/Biscoe-adjacent combinations isn't missing data, it's a real ecological signal that a species simply wasn't recorded on that island.
+
+## Cleaning strings and dates
+
+```{r clean-sites}
+clean_sites
+```
+
+Five differently-formatted site name entries collapse down to just two clean categories once lowercased, trimmed, and standardised and this is exactly the kind of mismatch that would break a `group_by()` or `join()` if left uncleaned.
+
+## Relational joins
+
+```{r joined-data}
+joined_data
+```
+
+`left_join()` preserves every observation while attaching spatial metadata wherever a match exists. Running an `anti_join()` afterward is a useful diagnostic because it immediately surfaces the `HB` site code that has no corresponding metadata entry, rather than that mismatch producing an `NA` I might not notice.
+
+## Handling missing values
+
+Four distinct situations came up, each needing a different fix:
+
+-   **`na_if()`** — for legacy sensor error codes (e.g. `-999`) that are secretly disguised missing values, not real readings.
+-   **`coalesce()`** — for cases where a blank cell actually means a known value (like zero sharks seen), not genuinely unknown data.
+-   **`NaN`** — for mathematically impossible results (like `0/0` in a CPUE calculation), distinct from both of the above.
+-   **`complete()`** — for implicit missing data, where the absence of a row (a species not caught at a site) is itself meaningful and needs to be made explicit as a zero before any averaging happens.
+
+Getting these three concepts mixed up would quietly bias any downstream statistics because treating a real zero as missing, or a sensor error as a real reading, changes the answer without throwing any error.
+
+## Practical exercises: Penguins, Pivots, and Relational Data
+
+### Exercise 1 & 2: Cleaning metadata and joining spatially
+
+```{r penguins-spatial}
+head(penguins_spatial)
+```
+
+### Exercise 3: Wide summary matrix of maximum body mass
+
+```{r max-mass-matrix}
+max_mass_matrix
+```
+
+## Reflection
+
+Working in the AI-On phase felt noticeably different from Workshop 1, it was indeed faster to write, but it shifted the actual work toward reading and verifying rather than typing from scratch. The clearest place this mattered was the missing-value section: `na_if()`, `coalesce()`, `NaN`, and `complete()` all "fix" a gap in the data, but they represent completely different underlying situations (a broken sensor, a true zero, a mathematically undefined result, and an unsampled combination), and using the wrong one would corrupt a summary statistic without ever throwing an error. Having Copilot suggest code faster didn't remove the need to actually think through which situation I was in, if anything, it made that judgment call more important, since a plausible-looking suggestion can still be wrong for the specific ecological context.
+
+## 

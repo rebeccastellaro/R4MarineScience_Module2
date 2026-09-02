@@ -1,0 +1,123 @@
+---
+title: "R for Marine Science - Workshop 1"
+author: "Rebecca Castellaro"
+format: 
+  html:
+    code-fold: show
+    toc: true
+    toc-location: right
+    theme: spacelab
+editor: visual
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Introduction
+
+This workshop was completed entirely in the AI-Off phase, Copilot and chattr switched off, writing every line manually to build genuine understanding of how R processes data, rather than leaning on autocomplete before I actually know what the code does.
+
+## Sourcing the wrangling script
+
+All the data ingestion, tibble/data-frame comparison, and dplyr wrangling verbs (`select()`, `filter()`, `arrange()`, `mutate()`, `group_by()`/`summarise()`) live in a separate script (`Workshop_1.R`) rather than cluttering this document, this keeps the report focused on results, not the messy cleaning process.
+
+```{r source-script}
+library(tidyverse)
+library(palmerpenguins)
+
+source("Workshop_1.R")
+```
+
+## 1.9 Integrating data grammar with visual diagnostics
+
+### Direct piping: mean body mass by species and island
+
+Rather than saving an intermediate summary table, this pipes the aggregation straight into `ggplot()` which is efficient for rapid exploratory visualisation. Error bars show standard deviation.
+
+```{r mass-compare-plot}
+mass_compare_plot <- penguins |>
+  group_by(species, island) |>
+  summarise(
+    mean_mass = mean(body_mass_g, na.rm = TRUE),
+    sd_mass = sd(body_mass_g, na.rm = TRUE),
+    n = n(),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = species, y = mean_mass, colour = island)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_mass - sd_mass,
+                     ymax = mean_mass + sd_mass),
+                width = 0.2) +
+  labs(title = "Mean Body Mass by Species and Island",
+       subtitle = "Error bars represent standard deviation",
+       y = "Mean Body Mass (g)",
+       x = "Species") +
+  theme_minimal()
+
+mass_compare_plot
+```
+
+What this shows: Gentoo penguins are clearly heavier on average than Adelie or Chinstrap, and the pattern holds consistently across islands, so species is doing more work than location here. The relatively small error bars suggest pretty consistent body mass within each species/island group, rather than huge individual variation.
+
+### Challenge: swapping standard deviation for standard error
+
+Standard error (`sd / sqrt(n)`) accounts for sample size, so it shrinks as more individuals are measured. It estimates uncertainty in the mean itself, rather than describing the spread of raw individual measurements the way standard deviation does.
+
+```{r mass-compare-plot-se}
+mass_compare_plot_se <- penguins |>
+  group_by(species, island) |>
+  summarise(
+    mean_mass = mean(body_mass_g, na.rm = TRUE),
+    sd_mass = sd(body_mass_g, na.rm = TRUE),
+    n = sum(!is.na(body_mass_g)),
+    std_error = sd_mass / sqrt(n),
+    .groups = "drop"
+  ) |>
+  ggplot(aes(x = species, y = mean_mass, colour = island)) +
+  geom_point(size = 3) +
+  geom_errorbar(aes(ymin = mean_mass - std_error,
+                     ymax = mean_mass + std_error),
+                width = 0.2) +
+  labs(title = "Mean Body Mass by Species and Island",
+       subtitle = "Error bars represent standard error",
+       y = "Mean Body Mass (g)",
+       x = "Species") +
+  theme_minimal()
+
+mass_compare_plot_se
+```
+
+Comparing the two: the standard error bars are noticeably tighter than the standard deviation bars and this is because SE reflects confidence in the estimated mean, not the raw spread of individual penguins. With SE bars, species differences look even more clearly separated and statistically convincing, because we're not being visually distracted by individual variation within each group.
+
+### Summary table alongside the figure
+
+```{r summary-table}
+biological_signal
+```
+
+## Reflection
+
+Writing this workshop's code manually rather than leaning on Copilot forced me to actually read every error message R gave me instead of skimming past it, and to keep track of variable types as I went rather than assuming they were correct. The clearest example was the "Missing Value Trap" in section 1.8 where `summarise()` silently returned `NA` for groups with missing values until I explicitly added `na.rm = TRUE`, which wouldn't have been obvious at first. Comparing the tibble vs the old data.frame also made more sense doing it manually, actually seeing the tibble reject a partial column match instead of silently guessing what I meant made it obvious why that's a safety feature.
+
+## 1.10 Saving and exporting outputs
+
+```{r create-output-dirs}
+if (!dir.exists("../outputs/figures")) dir.create("../outputs/figures")
+if (!dir.exists("../outputs/tables")) dir.create("../outputs/tables")
+if (!dir.exists("../Rdata")) dir.create("../Rdata")
+```
+
+```{r save-outputs}
+# Universal flat text file for sharing with collaborators who don't use R
+write_csv(biological_signal, "../outputs/tables/penguin_species_mass_summary.csv")
+
+# Native R binary object preserves exact column types for reloading later
+saveRDS(clean_scientific_fields, "../outputs/clean_penguin_morphology_cohort.rds")
+
+# Save the figure
+ggsave("../outputs/figures/mass_compare_plot.png",
+       plot = mass_compare_plot,
+       width = 120, height = 120,
+       units = "mm", dpi = 300)
+```
