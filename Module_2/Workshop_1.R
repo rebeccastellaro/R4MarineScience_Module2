@@ -1,8 +1,8 @@
 #------------------------------------#
 # MB5370: R for Marine Science
 # Workshop 1: Foundations of Data Science - Wrangling and Plotting
-# < YOUR NAME HERE >
-# < DATE >
+# Rebecca Castellaro
+#
 #------------------------------------#
 
 # ============================================================
